@@ -121,6 +121,7 @@ static int cbs_enqueue_soft(struct sk_buff *skb, struct Qdisc *sch,
 		/* We need to stop accumulating credits when there's
 		 * no enqueued packets and q->credits is positive.
 		 */
+		credit_access(q->credit, 0);
 		q->credits = 0;
 		q->last = ktime_get_ns();
 	}
@@ -158,6 +159,25 @@ static s64 credits_from_len(unsigned int len, s64 slope, s64 port_rate)
 	return div64_s64(len * slope, port_rate);
 }
 
+
+/* credit_access function is used to update the credit value*/
+static int credit_access(int credit, int flag)
+{
+	static int credit_stored;
+	/* flag variable is used to check whether the function is called for incrementing the credit or decrementing the credit value */
+
+	if(flag==0) {
+    	     credit_stored+=credit;
+     	     return 1;
+	}
+   
+        if(credit_stored > credit) {
+      		credit_stored - = credit;
+          	return credit;
+        }
+        return credit_stored;
+}
+
 static struct sk_buff *cbs_child_dequeue(struct Qdisc *sch, struct Qdisc *child)
 {
 	struct sk_buff *skb;
@@ -192,6 +212,12 @@ static struct sk_buff *cbs_dequeue_soft(struct Qdisc *sch)
 
 		credits = q->credits + credits;
 		q->credits = min_t(s64, credits, q->hicredit);
+
+		if (q->credits < 0) {  
+             	      int credit_required = -(q->credit)
+		/*credit_required = -(q->credit) this is done just to get the required credits, i.e if q->credit == -2 we increment it by 2 and make it q->credit == 0 */ 
+		      q->credits += credit_access(credit_required, 1)
+               }
 
 		if (q->credits < 0) {
 			s64 delay;
